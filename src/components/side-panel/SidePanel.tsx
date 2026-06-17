@@ -76,7 +76,9 @@ export default function SidePanel() {
   return (
     <div className={`side-panel ${open ? "open" : ""}`}>
       <header className="top">
-        <h2>Console</h2>
+        <h2 className="logo-container">
+          <img src="/logo.png" alt="Console Logo" className="console-logo" />
+        </h2>
         {open ? (
           <button className="opener" onClick={() => setOpen(false)}>
             <RiSidebarFoldLine color="#b4b8bb" />

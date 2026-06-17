@@ -136,6 +136,19 @@ body {
     }
   }
 
+  .left-panel {
+    height: 100vh;
+  }
+
+  .right-content {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
   main {
     position: relative;
     display: flex;

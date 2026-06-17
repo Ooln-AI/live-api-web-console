@@ -69,6 +69,8 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
   public ws: WebSocket | null = null;
   protected config: LiveConfig | null = null;
   public url: string = "";
+  private pingIntervalId: NodeJS.Timeout | null = null;
+
   public getConfig() {
     return { ...this.config };
   }
@@ -77,7 +79,7 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
     super();
     url =
       url ||
-      `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
+      `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
     url += `?key=${apiKey}`;
     this.url = url;
     this.send = this.send.bind(this);
@@ -94,6 +96,11 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
 
   connect(config: LiveConfig): Promise<boolean> {
     this.config = config;
+
+    if (this.pingIntervalId) {
+      clearInterval(this.pingIntervalId);
+      this.pingIntervalId = null;
+    }
 
     const ws = new WebSocket(this.url);
 
@@ -132,6 +139,10 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
         ws.addEventListener("close", (ev: CloseEvent) => {
           this.disconnect(ws);
           let reason = ev.reason || "";
+          if (this.pingIntervalId) {
+            clearInterval(this.pingIntervalId);
+            this.pingIntervalId = null;
+          }
           if (reason.toLowerCase().includes("error")) {
             const prelude = "ERROR]";
             const preludeIndex = reason.indexOf(prelude);
@@ -154,8 +165,10 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
   }
 
   disconnect(ws?: WebSocket) {
-    // could be that this is an old websocket and theres already a new instance
-    // only close it if its still the correct reference
+    if (this.pingIntervalId) {
+      clearInterval(this.pingIntervalId);
+      this.pingIntervalId = null;
+    }
     if ((!ws || this.ws === ws) && this.ws) {
       this.ws.close();
       this.ws = null;
@@ -186,8 +199,6 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
       return;
     }
 
-    // this json also might be `contentUpdate { interrupted: true }`
-    // or contentUpdate { end_of_turn: true }
     if (isServerContentMessage(response)) {
       const { serverContent } = response;
       if (isInterrupted(serverContent)) {
@@ -198,21 +209,17 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
       if (isTurnComplete(serverContent)) {
         this.log("server.send", "turnComplete");
         this.emit("turncomplete");
-        //plausible theres more to the message, continue
       }
 
       if (isModelTurn(serverContent)) {
         let parts: Part[] = serverContent.modelTurn.parts;
 
-        // when its audio that is returned for modelTurn
         const audioParts = parts.filter(
           (p) => p.inlineData && p.inlineData.mimeType.startsWith("audio/pcm")
         );
         const base64s = audioParts.map((p) => p.inlineData?.data);
 
-        // strip the audio parts out of the modelTurn
         const otherParts = difference(parts, audioParts);
-        // console.log("otherParts", otherParts);
 
         base64s.forEach((b64) => {
           if (b64) {
@@ -236,9 +243,6 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
     }
   }
 
-  /**
-   * send realtimeInput, this is base64 chunks of "audio/pcm" and/or "image/jpg"
-   */
   sendRealtimeInput(chunks: GenerativeContentBlob[]) {
     let hasAudio = false;
     let hasVideo = false;
@@ -272,9 +276,6 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
     this.log(`client.realtimeInput`, message);
   }
 
-  /**
-   *  send a response to a function call and provide the id of the functions you are responding to
-   */
   sendToolResponse(toolResponse: ToolResponseMessage["toolResponse"]) {
     const message: ToolResponseMessage = {
       toolResponse,
@@ -284,9 +285,6 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
     this.log(`client.toolResponse`, message);
   }
 
-  /**
-   * send normal content parts such as { text }
-   */
   send(parts: Part | Part[], turnComplete: boolean = true) {
     parts = Array.isArray(parts) ? parts : [parts];
     const content: Content = {
@@ -305,10 +303,6 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
     this.log(`client.send`, clientContentRequest);
   }
 
-  /**
-   *  used internally to send all messages
-   *  don't use directly unless trying to send an unsupported message type
-   */
   _sendDirect(request: object) {
     if (!this.ws) {
       throw new Error("WebSocket is not connected");

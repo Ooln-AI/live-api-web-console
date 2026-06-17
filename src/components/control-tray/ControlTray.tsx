@@ -125,8 +125,8 @@ function ControlTray({
       }
 
       const ctx = canvas.getContext("2d")!;
-      canvas.width = video.videoWidth * 0.25;
-      canvas.height = video.videoHeight * 0.25;
+      canvas.width = video.videoWidth * 0.75;
+      canvas.height = video.videoHeight * 0.75;
       if (canvas.width + canvas.height > 0) {
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const base64 = canvas.toDataURL("image/jpeg", 1.0);
@@ -134,7 +134,7 @@ function ControlTray({
         client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
       }
       if (connected) {
-        timeoutId = window.setTimeout(sendVideoFrame, 1000 / 0.5);
+        timeoutId = window.setTimeout(sendVideoFrame, 1000 / 1.0);
       }
     }
     if (connected && activeVideoStream !== null) {
